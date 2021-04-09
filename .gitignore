@@ -1,0 +1,28 @@
+# gradle
+
+.gradle/
+build/
+out/
+classes/
+
+# idea
+
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# vscode
+
+.vscode/
+
+# eclipse
+
+.settings/
+bin/
+.classpath
+.project
+
+# maven
+
+target/
