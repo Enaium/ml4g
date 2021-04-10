@@ -15,7 +15,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.objectweb.asm.Opcodes.ASM9;
 
@@ -36,24 +38,63 @@ public class RemappingClassTask extends Task {
                 byte[] bytes = FileUtils.readFileToByteArray(file);
                 FileUtils.writeByteArrayToFile(file, MappingUtil.accept(bytes));
                 if (extension.mixinRefMap != null) {
-
-                    MixinScannerVisitor mixin = new MixinScannerVisitor();
-                    new ClassReader(bytes).accept(mixin, 0);
-                    for (String target : mixin.getTargets()) {
+                    MixinScannerVisitor mixinScannerVisitor = new MixinScannerVisitor();
+                    new ClassReader(bytes).accept(mixinScannerVisitor, 0);
+                    for (String mixin : mixinScannerVisitor.getMixins()) {
                         JsonObject mapping = new JsonObject();
-                        if (mixin.getMethods().isEmpty())
-                            continue;
-                        for (String method : mixin.getMethods()) {
-                            String methodName = method.substring(0, method.indexOf("("));
-                            String methodDescriptor = method.substring(method.lastIndexOf("("));
-                            String methodObf = MappingUtil.methodCleanToObfMap.get(target + "/" + methodName + " " + methodDescriptor);
-                            if (methodObf == null) {
+
+                        for (String method : mixinScannerVisitor.getMethods()) {
+                            mapping.addProperty(method, getMethodObf(mixin, method));
+                        }
+
+                        for (String mixinTarget : mixinScannerVisitor.getTargets()) {
+                            if (!mixinTarget.contains("field:")) {
+                                String targetClass = MappingUtil.classCleanToObfMap.get(mixinTarget.substring(1, mixinTarget.indexOf(";")));
+
+                                if (targetClass == null) {
+                                    continue;
+                                }
+
+                                String targetMethod = getMethodObf(targetClass, mixinTarget.substring(mixinTarget.indexOf(";") + 1));
+                                if (targetMethod == null) {
+                                    continue;
+                                }
+                                mapping.addProperty(mixinTarget, targetMethod);
+                            } else {
+                                String left = mixinTarget.split("field:")[0];
+                                String right = mixinTarget.split("field:")[1];
+                                String targetClass = MappingUtil.classCleanToObfMap.get(left.substring(1, left.indexOf(";")));
+                                String targetField = MappingUtil.classCleanToObfMap.get(right.substring(1, right.indexOf(";")));
+
+                                if (targetClass == null || targetField == null) {
+                                    continue;
+                                }
+
+                                mapping.addProperty(mixinTarget, "L" + targetClass + ";field:L" + targetField + ";");
+                            }
+                        }
+
+                        for (Map.Entry<String, String> entry : mixinScannerVisitor.getAccessors().entrySet()) {
+
+                            String fieldName = MappingUtil.fieldCleanToObfMap.get(mixin + "/" + entry.getValue());
+
+                            if (fieldName == null) {
                                 continue;
                             }
-                            methodObf = "L" + methodObf.split(" ")[0].replace("/", ";") + methodObf.split(" ")[1];
-                            mapping.addProperty(method, methodObf);
+
+                            if (entry.getKey().contains(";")) {
+                                String ret = entry.getKey().substring(entry.getKey().lastIndexOf(")") + 1);
+                                ret = ret.substring(1, ret.lastIndexOf(";"));
+                                ret = MappingUtil.classCleanToObfMap.get(ret);
+                                if (ret == null) {
+                                    continue;
+                                }
+                                mapping.addProperty(entry.getValue(), fieldName.split("/")[1] + ":L" + ret + ";");
+                            } else {
+                                mapping.addProperty(entry.getValue(), entry.getKey());
+                            }
                         }
-                        mappings.add(mixin.className, mapping);
+                        mappings.add(mixinScannerVisitor.className, mapping);
                     }
 
                 }
@@ -79,10 +120,22 @@ public class RemappingClassTask extends Task {
         }
     }
 
+    private String getMethodObf(String klass, String method) {
+        String methodName = method.substring(0, method.indexOf("("));
+        String methodDescriptor = method.substring(method.indexOf("("));
+        String methodObf = MappingUtil.methodCleanToObfMap.get(klass + "/" + methodName + " " + methodDescriptor);
+        if (methodObf == null) {
+            return null;
+        }
+        methodObf = "L" + methodObf.split(" ")[0].replace("/", ";") + methodObf.split(" ")[1];
+        return methodObf;
+    }
+
     private static class MixinScannerVisitor extends ClassVisitor {
 
         private AnnotationNode mixin = null;
-        private final List<AnnotationNode> injectList = new ArrayList<>();
+        private final List<AnnotationNode> methodList = new ArrayList<>();
+        private final HashMap<String, AnnotationNode> accessorList = new HashMap<>();
 
         String className;
 
@@ -104,14 +157,20 @@ public class RemappingClassTask extends Task {
         }
 
         @Override
-        public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
-            return new MethodVisitor(api, super.visitMethod(access, name, descriptor, signature, exceptions)) {
+        public MethodVisitor visitMethod(int access, String name, String methodDescriptor, String signature, String[] exceptions) {
+            return new MethodVisitor(api, super.visitMethod(access, name, methodDescriptor, signature, exceptions)) {
                 @Override
                 public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
                     if (descriptor.equals("Lorg/spongepowered/asm/mixin/injection/Inject;")) {
                         AnnotationNode inject = new AnnotationNode(descriptor);
-                        injectList.add(inject);
+                        methodList.add(inject);
                         return inject;
+                    }
+
+                    if (descriptor.equals("Lorg/spongepowered/asm/mixin/gen/Accessor;")) {
+                        AnnotationNode accessor = new AnnotationNode(descriptor);
+                        accessorList.put(methodDescriptor, accessor);
+                        return accessor;
                     }
                     return super.visitAnnotation(descriptor, visible);
                 }
@@ -120,13 +179,13 @@ public class RemappingClassTask extends Task {
 
         List<String> getMethods() {
 
-            if (injectList.isEmpty()) {
+            if (methodList.isEmpty()) {
                 return new ArrayList<>();
             }
 
             List<String> methods = new ArrayList<>();
 
-            for (AnnotationNode annotationNode : injectList) {
+            for (AnnotationNode annotationNode : methodList) {
                 List<String> privateMethod = getAnnotationValue(annotationNode, "method");
                 if (privateMethod != null) {
                     methods.addAll(privateMethod);
@@ -137,20 +196,62 @@ public class RemappingClassTask extends Task {
         }
 
         List<String> getTargets() {
-            if (mixin == null) {
+
+            if (methodList.isEmpty()) {
                 return new ArrayList<>();
             }
 
             List<String> targets = new ArrayList<>();
-            List<Type> publicTargets = getAnnotationValue(mixin, "value");
 
-            if (publicTargets != null) {
-                for (Type type : publicTargets) {
-                    targets.add(type.getClassName().replace(".", "/"));
+            for (AnnotationNode annotationNode : methodList) {
+                List<AnnotationNode> at = getAnnotationValue(annotationNode, "at");
+
+                if (at == null) {
+                    return new ArrayList<>();
+                }
+
+                for (AnnotationNode node : at) {
+                    String privateTarget = getAnnotationValue(node, "target");
+
+                    if (privateTarget != null) {
+                        targets.add(privateTarget);
+                    }
                 }
             }
 
             return targets;
+        }
+
+
+        HashMap<String, String> getAccessors() {
+            if (accessorList.isEmpty()) {
+                return new HashMap<>();
+            }
+
+            HashMap<String, String> accessors = new HashMap<>();
+
+            for (Map.Entry<String, AnnotationNode> entry : accessorList.entrySet()) {
+                accessors.put(entry.getKey(), getAnnotationValue(entry.getValue(), "value"));
+            }
+
+            return accessors;
+        }
+
+        List<String> getMixins() {
+            if (mixin == null) {
+                return new ArrayList<>();
+            }
+
+            List<String> mixins = new ArrayList<>();
+            List<Type> publicTargets = getAnnotationValue(mixin, "value");
+
+            if (publicTargets != null) {
+                for (Type type : publicTargets) {
+                    mixins.add(type.getClassName().replace(".", "/"));
+                }
+            }
+
+            return mixins;
         }
 
         @SuppressWarnings("unchecked")

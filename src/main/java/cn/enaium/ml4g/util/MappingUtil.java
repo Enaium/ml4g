@@ -29,6 +29,7 @@ public class MappingUtil {
     public static final HashMap<String, String> classCleanToObfMap = new HashMap<>();
 
     public static final HashMap<String, String> fieldObfToCleanMap = new HashMap<>();
+    public static final HashMap<String, String> fieldCleanToObfMap = new HashMap<>();
 
     public static final HashMap<String, String> methodObfToCleanMap = new HashMap<>();
     public static final HashMap<String, String> methodCleanToObfMap = new HashMap<>();
@@ -79,6 +80,7 @@ public class MappingUtil {
                     String clean = currentCleanClass + "/" + split[1];
                     String obf = currentObfClass + "/" + split[2];
                     fieldObfToCleanMap.put(obf, clean);
+                    fieldCleanToObfMap.put(clean, obf);
                 } else {
                     //Method
                     String[] split = line.contains(":") ? line.substring(line.lastIndexOf(":") + 1).trim().split(SPLITTER) : line.trim().split(SPLITTER);

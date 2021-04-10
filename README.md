@@ -33,7 +33,7 @@ minecraft {
 }
 ```
 
-### Use Mixin (Only support @Mixin and @Inject)
+### Use Mixin (Only support @Mixin,@Inject and @Accessor)
 
 ```groovy
 minecraft {
