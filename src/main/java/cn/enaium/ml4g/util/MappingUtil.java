@@ -206,6 +206,7 @@ public class MappingUtil {
         classReader.accept(new ClassVisitor(ASM9) {
             @Override
             public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+
                 if (!superName.startsWith("java/")) {
                     if (superHashMap.containsKey(name)) {
                         if (!superHashMap.get(name).contains(superName)) {

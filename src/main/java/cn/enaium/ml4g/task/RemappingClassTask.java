@@ -31,7 +31,7 @@ public class RemappingClassTask extends Task {
             JsonObject jsonObject = new JsonObject();
             JsonObject mappings = new JsonObject();
             File classes = new File(getProject().getBuildDir(), "classes");
-//            MappingUtil.analyzeJar(GameUtil.getClientCleanFile(extension));
+            MappingUtil.analyzeJar(GameUtil.getClientCleanFile(extension));
 
             MappingUtil.initMapping(GameUtil.getClientMappingFile(extension));
             MappingUtil.putRemap(false);
