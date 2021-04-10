@@ -31,13 +31,14 @@ public class RemappingClassTask extends Task {
             JsonObject jsonObject = new JsonObject();
             JsonObject mappings = new JsonObject();
             File classes = new File(getProject().getBuildDir(), "classes");
-            MappingUtil.analyzeJar(GameUtil.getClientCleanFile(extension));
+//            MappingUtil.analyzeJar(GameUtil.getClientCleanFile(extension));
+
+            MappingUtil.initMapping(GameUtil.getClientMappingFile(extension));
+            MappingUtil.putRemap(false);
+
             for (File file : FileUtils.listFiles(classes.getAbsoluteFile(), new String[]{"class"}, true)) {
-                MappingUtil.initMapping(GameUtil.getClientMappingFile(extension));
-                MappingUtil.putRemap(false);
-                byte[] bytes = FileUtils.readFileToByteArray(file);
-                FileUtils.writeByteArrayToFile(file, MappingUtil.accept(bytes));
                 if (extension.mixinRefMap != null) {
+                    byte[] bytes = FileUtils.readFileToByteArray(file);
                     MixinScannerVisitor mixinScannerVisitor = new MixinScannerVisitor();
                     new ClassReader(bytes).accept(mixinScannerVisitor, 0);
                     for (String mixin : mixinScannerVisitor.getMixins()) {
@@ -83,13 +84,21 @@ public class RemappingClassTask extends Task {
                             }
 
                             if (entry.getKey().contains(";")) {
-                                String ret = entry.getKey().substring(entry.getKey().lastIndexOf(")") + 1);
-                                ret = ret.substring(1, ret.lastIndexOf(";"));
-                                ret = MappingUtil.classCleanToObfMap.get(ret);
-                                if (ret == null) {
+
+
+                                String arg;
+                                if (!entry.getKey().contains(")V")) {
+                                    arg = entry.getKey().substring(entry.getKey().lastIndexOf(")") + 1);
+                                } else {
+                                    arg = entry.getKey().substring(entry.getKey().indexOf("(") + 1, entry.getKey().lastIndexOf(")"));
+                                }
+
+                                arg = arg.substring(1, arg.lastIndexOf(";"));
+                                arg = MappingUtil.classCleanToObfMap.get(arg);
+                                if (arg == null) {
                                     continue;
                                 }
-                                mapping.addProperty(entry.getValue(), fieldName.split("/")[1] + ":L" + ret + ";");
+                                mapping.addProperty(entry.getValue(), fieldName.split("/")[1] + ":L" + arg + ";");
                             } else {
                                 mapping.addProperty(entry.getValue(), entry.getKey());
                             }
@@ -114,6 +123,12 @@ public class RemappingClassTask extends Task {
                         FileUtils.write(new File(dir, extension.mixinRefMap), new GsonBuilder().setPrettyPrinting().create().toJson(jsonObject), StandardCharsets.UTF_8);
                     }
                 }
+            }
+
+            for (File file : FileUtils.listFiles(classes.getAbsoluteFile(), new String[]{"class"}, true)) {
+                byte[] bytes = FileUtils.readFileToByteArray(file);
+                MappingUtil.analyze(bytes);
+                FileUtils.writeByteArrayToFile(file, MappingUtil.accept(bytes));
             }
         } catch (IOException e) {
             getProject().getLogger().lifecycle(e.getMessage(), e);

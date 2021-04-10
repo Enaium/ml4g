@@ -7,7 +7,6 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.commons.ClassRemapper;
 import org.objectweb.asm.commons.SimpleRemapper;
-import org.objectweb.asm.tree.ClassNode;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -196,24 +195,29 @@ public class MappingUtil {
             if (!jarEntry.getName().endsWith(".class"))
                 continue;
 
-            ClassReader classReader = new ClassReader(jarFile.getInputStream(jarEntry));
-            classReader.accept(new ClassVisitor(ASM9) {
-                @Override
-                public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
-                    if (!superName.startsWith("java/")) {
-                        if (superHashMap.containsKey(name)) {
-                            if (!superHashMap.get(name).contains(superName)) {
-                                superHashMap.get(name).add(superName);
-                            }
-                        } else {
-                            superHashMap.put(name, new ArrayList<>(Collections.singleton(superName)));
-                        }
-                    }
-                    super.visit(version, access, name, signature, superName, interfaces);
-                }
-            }, 0);
+            analyze(IOUtils.toByteArray(jarFile.getInputStream(jarEntry)));
+
         }
         jarFile.close();
+    }
+
+    public static void analyze(byte[] bytes) throws IOException {
+        ClassReader classReader = new ClassReader(bytes);
+        classReader.accept(new ClassVisitor(ASM9) {
+            @Override
+            public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+                if (!superName.startsWith("java/")) {
+                    if (superHashMap.containsKey(name)) {
+                        if (!superHashMap.get(name).contains(superName)) {
+                            superHashMap.get(name).add(superName);
+                        }
+                    } else {
+                        superHashMap.put(name, new ArrayList<>(Collections.singleton(superName)));
+                    }
+                }
+                super.visit(version, access, name, signature, superName, interfaces);
+            }
+        }, 0);
     }
 
     public static void cleanJar(File inputFile, File outFile) throws IOException {
