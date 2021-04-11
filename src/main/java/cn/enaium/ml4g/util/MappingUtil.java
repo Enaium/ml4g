@@ -65,7 +65,7 @@ public class MappingUtil {
                     continue;
 
                 if (line.matches(NAME_LINE)) {
-                    currentObfClass = line.substring(line.lastIndexOf(" ") + 1, line.indexOf(":"));
+                    currentObfClass = internalize(line.substring(line.lastIndexOf(" ") + 1, line.indexOf(":")));
                     currentCleanClass = classObfToCleanMap.getOrDefault(currentObfClass, internalize(currentObfClass));
                     continue;
                 }
@@ -102,8 +102,8 @@ public class MappingUtil {
                                 tempCleanArs.append(internalize(s));
                             }
                         }
-                        obfArgs = "(" + tempObfArs.toString() + ")";
-                        cleanArgs = "(" + tempCleanArs.toString() + ")";
+                        obfArgs = "(" + tempObfArs + ")";
+                        cleanArgs = "(" + tempCleanArs + ")";
                     } else {
                         obfArgs = "()";
                         cleanArgs = "()";
@@ -206,15 +206,31 @@ public class MappingUtil {
         classReader.accept(new ClassVisitor(ASM9) {
             @Override
             public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
-
-                if (!superName.startsWith("java/")) {
-                    if (superHashMap.containsKey(name)) {
+                ArrayList<String> strings = new ArrayList<>();
+                if (superHashMap.containsKey(name)) {
+                    if (superName != null) {
                         if (!superHashMap.get(name).contains(superName)) {
-                            superHashMap.get(name).add(superName);
+                            strings.add(superName);
                         }
-                    } else {
-                        superHashMap.put(name, new ArrayList<>(Collections.singleton(superName)));
                     }
+
+                    if (interfaces != null) {
+                        for (String inter : interfaces) {
+                            if (!superHashMap.get(name).contains(inter)) {
+                                strings.add(inter);
+                            }
+                        }
+                    }
+                    superHashMap.get(name).addAll(strings);
+                } else {
+                    if (superName != null) {
+                        strings.add(superName);
+                    }
+
+                    if (interfaces != null) {
+                        Collections.addAll(strings, interfaces);
+                    }
+                    superHashMap.put(name, strings);
                 }
                 super.visit(version, access, name, signature, superName, interfaces);
             }
@@ -275,6 +291,8 @@ public class MappingUtil {
                         }
                     }
                 }
+
+
                 return remappedName == null ? name : remappedName;
             }
 
