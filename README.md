@@ -12,7 +12,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'cn.enaium:ml4g:1.0.4'
+        classpath 'cn.enaium:ml4g:1.0.5'
     }
 }
 
@@ -33,7 +33,7 @@ minecraft {
 }
 ```
 
-### Use Mixin (Only support @Mixin,@Inject and @Accessor)
+### Use Mixin (Only support @Mixin,@Inject,@Accessor and @Overwrite)
 
 ```groovy
 minecraft {
