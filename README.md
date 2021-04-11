@@ -12,7 +12,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'cn.enaium:ml4g:1.0.3'
+        classpath 'cn.enaium:ml4g:1.0.4'
     }
 }
 
