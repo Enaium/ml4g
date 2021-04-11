@@ -14,10 +14,7 @@ import org.objectweb.asm.tree.AnnotationNode;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.objectweb.asm.Opcodes.ASM9;
 
@@ -42,6 +39,9 @@ public class RemappingClassTask extends Task {
                     MixinScannerVisitor mixinScannerVisitor = new MixinScannerVisitor();
                     new ClassReader(bytes).accept(mixinScannerVisitor, 0);
                     for (String mixin : mixinScannerVisitor.getMixins()) {
+
+                        MappingUtil.superHashMap.put(mixinScannerVisitor.className, new ArrayList<>(Collections.singleton(mixin)));
+
                         JsonObject mapping = new JsonObject();
 
                         for (String method : mixinScannerVisitor.getMethods()) {
@@ -84,8 +84,6 @@ public class RemappingClassTask extends Task {
                             }
 
                             if (entry.getKey().contains(";")) {
-
-
                                 String arg;
                                 if (!entry.getKey().contains(")V")) {
                                     arg = entry.getKey().substring(entry.getKey().lastIndexOf(")") + 1);
