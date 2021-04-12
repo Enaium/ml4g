@@ -124,6 +124,10 @@ public class GameUtil {
         return new File(getGameDir(extension), extension.gameVersion + File.separator + extension.gameVersion + "-client-clean.jar");
     }
 
+    public static File getClientCleanSourceFile(ML4GExtension extension) {
+        return new File(getGameDir(extension), extension.gameVersion + File.separator + extension.gameVersion + "-client-clean-source.jar");
+    }
+
     public static File getMappingDir(ML4GExtension extension) {
         File mapping = new File(extension.getUserCache(), "mapping");
         if (!mapping.exists()) {

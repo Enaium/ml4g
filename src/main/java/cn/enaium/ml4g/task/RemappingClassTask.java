@@ -44,9 +44,16 @@ public class RemappingClassTask extends Task {
 
                         JsonObject mapping = new JsonObject();
 
-                        for (String method : mixinScannerVisitor.getMethods()) {
-                            mapping.addProperty(method, getMethodObf(mixin, method));
-                        }
+
+                        mixinScannerVisitor.getMethods().forEach((descriptor, methods) -> {
+                            for (String method : methods) {
+                                if (method.contains("(")) {
+                                    mapping.addProperty(method, getMethodObf(mixin, method));
+                                } else {
+                                    mapping.addProperty(method, getMethodObf(mixin, method + descriptor.replace("Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;", "")));
+                                }
+                            }
+                        });
 
                         for (String mixinTarget : mixinScannerVisitor.getTargets()) {
                             if (!mixinTarget.contains("field:")) {
@@ -101,6 +108,11 @@ public class RemappingClassTask extends Task {
                                 mapping.addProperty(entry.getValue(), entry.getKey());
                             }
                         }
+
+                        for (Map.Entry<String, String> entry : mixinScannerVisitor.getInvokers().entrySet()) {
+                            mapping.addProperty(entry.getValue(), getMethodObf(mixin, entry.getValue() + entry.getKey()));
+                        }
+
                         mappings.add(mixinScannerVisitor.className, mapping);
                     }
 
@@ -147,8 +159,9 @@ public class RemappingClassTask extends Task {
     private static class MixinScannerVisitor extends ClassVisitor {
 
         private AnnotationNode mixin = null;
-        private final List<AnnotationNode> methodList = new ArrayList<>();
+        private final HashMap<String, AnnotationNode> methodList = new HashMap<>();
         private final HashMap<String, AnnotationNode> accessorList = new HashMap<>();
+        private final HashMap<String, AnnotationNode> invokeList = new HashMap<>();
 
         String className;
 
@@ -176,7 +189,7 @@ public class RemappingClassTask extends Task {
                 public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
                     if (descriptor.equals("Lorg/spongepowered/asm/mixin/injection/Inject;")) {
                         AnnotationNode inject = new AnnotationNode(descriptor);
-                        methodList.add(inject);
+                        methodList.put(methodDescriptor, inject);
                         return inject;
                     }
 
@@ -185,26 +198,31 @@ public class RemappingClassTask extends Task {
                         accessorList.put(methodDescriptor, accessor);
                         return accessor;
                     }
+
+                    if (descriptor.equals("Lorg/spongepowered/asm/mixin/gen/Invoker;")) {
+                        AnnotationNode invoker = new AnnotationNode(descriptor);
+                        invokeList.put(methodDescriptor, invoker);
+                        return invoker;
+                    }
                     return super.visitAnnotation(descriptor, visible);
                 }
             };
         }
 
-        List<String> getMethods() {
+        HashMap<String, List<String>> getMethods() {
 
             if (methodList.isEmpty()) {
-                return new ArrayList<>();
+                return new HashMap<>();
             }
 
-            List<String> methods = new ArrayList<>();
+            HashMap<String, List<String>> methods = new HashMap<>();
 
-            for (AnnotationNode annotationNode : methodList) {
-                List<String> privateMethod = getAnnotationValue(annotationNode, "method");
+            methodList.forEach((k, v) -> {
+                List<String> privateMethod = getAnnotationValue(v, "method");
                 if (privateMethod != null) {
-                    methods.addAll(privateMethod);
+                    methods.put(k, privateMethod);
                 }
-            }
-
+            });
             return methods;
         }
 
@@ -216,7 +234,7 @@ public class RemappingClassTask extends Task {
 
             List<String> targets = new ArrayList<>();
 
-            for (AnnotationNode annotationNode : methodList) {
+            for (AnnotationNode annotationNode : methodList.values()) {
                 List<AnnotationNode> at = getAnnotationValue(annotationNode, "at");
 
                 if (at == null) {
@@ -248,6 +266,20 @@ public class RemappingClassTask extends Task {
             }
 
             return accessors;
+        }
+
+        HashMap<String, String> getInvokers() {
+            if (invokeList.isEmpty()) {
+                return new HashMap<>();
+            }
+
+            HashMap<String, String> invoker = new HashMap<>();
+
+            for (Map.Entry<String, AnnotationNode> entry : invokeList.entrySet()) {
+                invoker.put(entry.getKey(), getAnnotationValue(entry.getValue(), "value"));
+            }
+
+            return invoker;
         }
 
         List<String> getMixins() {
