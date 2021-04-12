@@ -12,7 +12,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'cn.enaium:ml4g:1.0.5'
+        classpath 'cn.enaium:ml4g:1.0.6'
     }
 }
 
@@ -33,34 +33,12 @@ minecraft {
 }
 ```
 
-### Use Mixin (Only support @Mixin,@Inject,@Accessor and @Overwrite)
+### Use Mixin
 
 ```groovy
 minecraft {
     mainClass = "net.minecraft.launchwrapper.Launch"
     tweakClass = "cn.enaium.example.launch.Tweaker"
     mixinRefMap = "mixins.temp.refmap.json"
-}
-```
-
-#### Example
-
-```java
-@Mixin(Minecraft.class)
-public class MinecraftMixin {
-    @Inject(at = @At("HEAD"), method = "run()V")//✔
-    public void run(CallbackInfo ci) {
-        System.out.println("Hello ML4G");
-    }
-}
-```
-
-```java
-@Mixin(Minecraft.class)
-public class MinecraftMixin {
-    @Inject(at = @At("HEAD"), method = "run")//❌
-    public void run(CallbackInfo ci) {
-        System.out.println("Hello ML4G");
-    }
 }
 ```
