@@ -42,3 +42,11 @@ minecraft {
     mixinRefMap = "mixins.temp.refmap.json"
 }
 ```
+
+### Use Inject
+
+```groovy
+minecraft {
+    mixinRefMap = "mixins.temp.refmap.json"
+}
+```
