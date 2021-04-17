@@ -2,6 +2,7 @@ package cn.enaium.ml4g.task.mapping;
 
 import cn.enaium.ml4g.util.ASMUtil;
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -31,9 +32,15 @@ public class InjectMapping {
         for (AnnotationNode invisibleAnnotation : classNode.invisibleAnnotations) {
             if (invisibleAnnotation.desc.equals("Lcn/enaium/inject/annotation/Inject;")) {
                 className = classNode.name;
-                String value = ASMUtil.getAnnotationValue(invisibleAnnotation, "value");
-                if (value != null) {
-                    injects.add(value);
+                Type value = ASMUtil.getAnnotationValue(invisibleAnnotation, "value");
+                if (value != null && !value.getDescriptor().equals("Lcn/enaium/inject/annotation/Inject;")) {
+                    injects.add(value.getClassName());
+                    continue;
+                }
+
+                String target = ASMUtil.getAnnotationValue(invisibleAnnotation, "target");
+                if (target != null && !target.equals("")) {
+                    injects.add(target);
                 }
             }
         }
