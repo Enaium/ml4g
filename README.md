@@ -47,6 +47,6 @@ minecraft {
 
 ```groovy
 minecraft {
-    mixinRefMap = "mixins.temp.refmap.json"
+    injectRemapping = "inject.remapping.json"
 }
 ```
