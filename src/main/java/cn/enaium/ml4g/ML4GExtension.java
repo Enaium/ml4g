@@ -12,6 +12,7 @@ public class ML4GExtension {
     public String mainClass = "net.minecraft.client.main.Main";
     public String tweakClass = null;
     public String mixinRefMap = null;
+    public String injectRemapping = null;
 
     private final Project project;
 

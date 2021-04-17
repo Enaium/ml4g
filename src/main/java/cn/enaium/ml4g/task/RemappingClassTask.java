@@ -1,5 +1,7 @@
 package cn.enaium.ml4g.task;
 
+import cn.enaium.ml4g.task.mapping.InjectMapping;
+import cn.enaium.ml4g.task.mapping.MixinMapping;
 import cn.enaium.ml4g.util.GameUtil;
 import cn.enaium.ml4g.util.MappingUtil;
 import com.google.gson.GsonBuilder;
@@ -8,15 +10,11 @@ import org.apache.commons.io.FileUtils;
 import org.gradle.api.plugins.JavaPluginConvention;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.TaskAction;
-import org.objectweb.asm.*;
-import org.objectweb.asm.tree.AnnotationNode;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-
-import static org.objectweb.asm.Opcodes.ASM9;
 
 /**
  * @author Enaium
@@ -25,37 +23,36 @@ public class RemappingClassTask extends Task {
     @TaskAction
     public void remapping() {
         try {
-            JsonObject jsonObject = new JsonObject();
-            JsonObject mappings = new JsonObject();
+            JsonObject mixinReMap = new JsonObject();
+            JsonObject mixinMappings = new JsonObject();
+            JsonObject injectMappings = new JsonObject();
             File classes = new File(getProject().getBuildDir(), "classes");
             MappingUtil.analyzeJar(GameUtil.getClientCleanFile(extension));
 
             MappingUtil.initMapping(GameUtil.getClientMappingFile(extension));
             MappingUtil.putRemap(false);
 
-            for (File file : FileUtils.listFiles(classes.getAbsoluteFile(), new String[]{"class"}, true)) {
-                if (extension.mixinRefMap != null) {
+            if (extension.mixinRefMap != null) {
+                for (File file : FileUtils.listFiles(classes.getAbsoluteFile(), new String[]{"class"}, true)) {
                     byte[] bytes = FileUtils.readFileToByteArray(file);
-                    MixinScannerVisitor mixinScannerVisitor = new MixinScannerVisitor();
-                    new ClassReader(bytes).accept(mixinScannerVisitor, 0);
-                    for (String mixin : mixinScannerVisitor.getMixins()) {
-
-                        MappingUtil.superHashMap.put(mixinScannerVisitor.className, new ArrayList<>(Collections.singleton(mixin)));
+                    MixinMapping mixinMapping = new MixinMapping();
+                    mixinMapping.accept(bytes);
+                    MappingUtil.superHashMap.put(mixinMapping.className, new ArrayList<>(mixinMapping.mixins));
+                    for (String mixin : mixinMapping.mixins) {
 
                         JsonObject mapping = new JsonObject();
 
-
-                        mixinScannerVisitor.getMethods().forEach((descriptor, methods) -> {
+                        mixinMapping.methods.forEach((descriptor, methods) -> {
                             for (String method : methods) {
                                 if (method.contains("(")) {
-                                    mapping.addProperty(method, getMethodObf(mixin, method));
+                                    mapping.addProperty(method, getMethodObf(mixin, method, false));
                                 } else {
-                                    mapping.addProperty(method, getMethodObf(mixin, method + descriptor.replace("Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;", "")));
+                                    mapping.addProperty(method, getMethodObf(mixin, method + descriptor.replace("Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;", ""), false));
                                 }
                             }
                         });
 
-                        for (String mixinTarget : mixinScannerVisitor.getTargets()) {
+                        for (String mixinTarget : mixinMapping.targets) {
                             if (!mixinTarget.contains("field:")) {
                                 String targetClass = MappingUtil.classCleanToObfMap.get(mixinTarget.substring(1, mixinTarget.indexOf(";")));
 
@@ -63,7 +60,7 @@ public class RemappingClassTask extends Task {
                                     continue;
                                 }
 
-                                String targetMethod = getMethodObf(targetClass, mixinTarget.substring(mixinTarget.indexOf(";") + 1));
+                                String targetMethod = getMethodObf(targetClass, mixinTarget.substring(mixinTarget.indexOf(";") + 1), false);
                                 if (targetMethod == null) {
                                     continue;
                                 }
@@ -82,7 +79,7 @@ public class RemappingClassTask extends Task {
                             }
                         }
 
-                        for (Map.Entry<String, String> entry : mixinScannerVisitor.getAccessors().entrySet()) {
+                        for (Map.Entry<String, String> entry : mixinMapping.accessors.entrySet()) {
 
                             String fieldName = MappingUtil.fieldCleanToObfMap.get(mixin + "/" + entry.getValue());
 
@@ -109,32 +106,58 @@ public class RemappingClassTask extends Task {
                             }
                         }
 
-                        for (Map.Entry<String, String> entry : mixinScannerVisitor.getInvokers().entrySet()) {
-                            mapping.addProperty(entry.getValue(), getMethodObf(mixin, entry.getValue() + entry.getKey()));
+                        for (Map.Entry<String, String> entry : mixinMapping.invokes.entrySet()) {
+                            mapping.addProperty(entry.getValue(), getMethodObf(mixin, entry.getValue() + entry.getKey(), false));
                         }
 
-                        mappings.add(mixinScannerVisitor.className, mapping);
+                        mixinMappings.add(mixinMapping.className, mapping);
                     }
+                }
+                mixinReMap.add("mappings", mixinMappings);
+            }
 
+            if (extension.injectRemapping != null) {
+                for (File file : FileUtils.listFiles(classes.getAbsoluteFile(), new String[]{"class"}, true)) {
+                    byte[] bytes = FileUtils.readFileToByteArray(file);
+                    InjectMapping injectMapping = new InjectMapping();
+                    injectMapping.accept(bytes);
+                    MappingUtil.superHashMap.put(injectMapping.className, new ArrayList<>(injectMapping.injects));
+                    for (String inject : injectMapping.injects) {
+                        JsonObject mapping = new JsonObject();
+                        String obfClassName = MappingUtil.classCleanToObfMap.get(inject.replace(".", "/"));
+                        mapping.addProperty(inject, obfClassName);
+
+                        for (Map.Entry<String, String> entry : injectMapping.methods.entrySet()) {
+                            mapping.addProperty(entry.getValue(), getMethodObf(inject.replace(".", "/"), entry.getValue() + entry.getKey().replace("Lcn/enaium/inject/callback/Callback;", ""), true));
+                        }
+
+                        injectMappings.add(injectMapping.className, mapping);
+                    }
                 }
             }
 
-            if (extension.mixinRefMap != null) {
-                jsonObject.add("mappings", mappings);
+            JavaPluginConvention java = (JavaPluginConvention) getProject().getConvention().getPlugins().get("java");
+            File resourceDir = new File(getProject().getBuildDir(), "resources");
+            for (SourceSet sourceSet : java.getSourceSets()) {
+                if (!resourceDir.exists()) {
+                    resourceDir.mkdir();
+                }
+                File dir = new File(resourceDir, sourceSet.getName());
+                if (!dir.exists()) {
+                    dir.mkdir();
+                }
 
-                JavaPluginConvention java = (JavaPluginConvention) getProject().getConvention().getPlugins().get("java");
-                File resourceDir = new File(getProject().getBuildDir(), "resources");
-                for (SourceSet sourceSet : java.getSourceSets()) {
-                    if (!resourceDir.exists()) {
-                        resourceDir.mkdir();
-                    }
-                    File dir = new File(resourceDir, sourceSet.getName());
-                    if (dir.exists()) {
-                        FileUtils.write(new File(dir, extension.mixinRefMap), new GsonBuilder().setPrettyPrinting().create().toJson(jsonObject), StandardCharsets.UTF_8);
-                    }
+                if (extension.mixinRefMap != null) {
+                    FileUtils.write(new File(dir, extension.mixinRefMap), new GsonBuilder().setPrettyPrinting().create().toJson(mixinReMap), StandardCharsets.UTF_8);
+                }
+
+                if (extension.injectRemapping != null) {
+                    FileUtils.write(new File(dir, extension.injectRemapping), new GsonBuilder().setPrettyPrinting().create().toJson(injectMappings), StandardCharsets.UTF_8);
                 }
             }
 
+
+            //class
             for (File file : FileUtils.listFiles(classes.getAbsoluteFile(), new String[]{"class"}, true)) {
                 byte[] bytes = FileUtils.readFileToByteArray(file);
                 MappingUtil.analyze(bytes);
@@ -145,178 +168,19 @@ public class RemappingClassTask extends Task {
         }
     }
 
-    private String getMethodObf(String klass, String method) {
+    private String getMethodObf(String klass, String method, boolean only) {
         String methodName = method.substring(0, method.indexOf("("));
         String methodDescriptor = method.substring(method.indexOf("("));
         String methodObf = MappingUtil.methodCleanToObfMap.get(klass + "/" + methodName + " " + methodDescriptor);
         if (methodObf == null) {
             return null;
         }
-        methodObf = "L" + methodObf.split(" ")[0].replace("/", ";") + methodObf.split(" ")[1];
+        if (!only) {
+            methodObf = "L" + methodObf.split(" ")[0].replace("/", ";") + methodObf.split(" ")[1];
+        } else {
+            methodObf = methodObf.split(" ")[0];
+            methodObf = methodObf.substring(methodObf.lastIndexOf("/") + 1);
+        }
         return methodObf;
-    }
-
-    private static class MixinScannerVisitor extends ClassVisitor {
-
-        private AnnotationNode mixin = null;
-        private final HashMap<String, AnnotationNode> methodList = new HashMap<>();
-        private final HashMap<String, AnnotationNode> accessorList = new HashMap<>();
-        private final HashMap<String, AnnotationNode> invokeList = new HashMap<>();
-
-        String className;
-
-        MixinScannerVisitor() {
-            super(ASM9);
-        }
-
-        @Override
-        public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
-            className = name;
-        }
-
-        @Override
-        public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-            if (descriptor.equals("Lorg/spongepowered/asm/mixin/Mixin;")) {
-                return mixin = new AnnotationNode(descriptor);
-            }
-            return super.visitAnnotation(descriptor, visible);
-        }
-
-        @Override
-        public MethodVisitor visitMethod(int access, String name, String methodDescriptor, String signature, String[] exceptions) {
-            return new MethodVisitor(api, super.visitMethod(access, name, methodDescriptor, signature, exceptions)) {
-                @Override
-                public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-                    if (descriptor.equals("Lorg/spongepowered/asm/mixin/injection/Inject;")) {
-                        AnnotationNode inject = new AnnotationNode(descriptor);
-                        methodList.put(methodDescriptor, inject);
-                        return inject;
-                    }
-
-                    if (descriptor.equals("Lorg/spongepowered/asm/mixin/gen/Accessor;")) {
-                        AnnotationNode accessor = new AnnotationNode(descriptor);
-                        accessorList.put(methodDescriptor, accessor);
-                        return accessor;
-                    }
-
-                    if (descriptor.equals("Lorg/spongepowered/asm/mixin/gen/Invoker;")) {
-                        AnnotationNode invoker = new AnnotationNode(descriptor);
-                        invokeList.put(methodDescriptor, invoker);
-                        return invoker;
-                    }
-                    return super.visitAnnotation(descriptor, visible);
-                }
-            };
-        }
-
-        HashMap<String, List<String>> getMethods() {
-
-            if (methodList.isEmpty()) {
-                return new HashMap<>();
-            }
-
-            HashMap<String, List<String>> methods = new HashMap<>();
-
-            methodList.forEach((k, v) -> {
-                List<String> privateMethod = getAnnotationValue(v, "method");
-                if (privateMethod != null) {
-                    methods.put(k, privateMethod);
-                }
-            });
-            return methods;
-        }
-
-        List<String> getTargets() {
-
-            if (methodList.isEmpty()) {
-                return new ArrayList<>();
-            }
-
-            List<String> targets = new ArrayList<>();
-
-            for (AnnotationNode annotationNode : methodList.values()) {
-                List<AnnotationNode> at = getAnnotationValue(annotationNode, "at");
-
-                if (at == null) {
-                    return new ArrayList<>();
-                }
-
-                for (AnnotationNode node : at) {
-                    String privateTarget = getAnnotationValue(node, "target");
-
-                    if (privateTarget != null) {
-                        targets.add(privateTarget);
-                    }
-                }
-            }
-
-            return targets;
-        }
-
-
-        HashMap<String, String> getAccessors() {
-            if (accessorList.isEmpty()) {
-                return new HashMap<>();
-            }
-
-            HashMap<String, String> accessors = new HashMap<>();
-
-            for (Map.Entry<String, AnnotationNode> entry : accessorList.entrySet()) {
-                accessors.put(entry.getKey(), getAnnotationValue(entry.getValue(), "value"));
-            }
-
-            return accessors;
-        }
-
-        HashMap<String, String> getInvokers() {
-            if (invokeList.isEmpty()) {
-                return new HashMap<>();
-            }
-
-            HashMap<String, String> invoker = new HashMap<>();
-
-            for (Map.Entry<String, AnnotationNode> entry : invokeList.entrySet()) {
-                invoker.put(entry.getKey(), getAnnotationValue(entry.getValue(), "value"));
-            }
-
-            return invoker;
-        }
-
-        List<String> getMixins() {
-            if (mixin == null) {
-                return new ArrayList<>();
-            }
-
-            List<String> mixins = new ArrayList<>();
-            List<Type> publicTargets = getAnnotationValue(mixin, "value");
-
-            if (publicTargets != null) {
-                for (Type type : publicTargets) {
-                    mixins.add(type.getClassName().replace(".", "/"));
-                }
-            }
-
-            return mixins;
-        }
-
-        @SuppressWarnings("unchecked")
-        private <T> T getAnnotationValue(AnnotationNode annotationNode, String key) {
-            boolean getNextValue = false;
-
-            if (annotationNode.values == null) {
-                return null;
-            }
-
-            for (Object value : annotationNode.values) {
-                if (getNextValue) {
-                    return (T) value;
-                }
-                if (value.equals(key)) {
-                    getNextValue = true;
-                }
-            }
-
-            return null;
-        }
     }
 }
