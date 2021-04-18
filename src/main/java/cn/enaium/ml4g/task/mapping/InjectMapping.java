@@ -18,6 +18,7 @@ public class InjectMapping {
 
     public final List<String> injects = new ArrayList<>();
     public final HashMap<String, String> methods = new HashMap<>();
+    public final List<String> targets = new ArrayList<>();
     public String className = null;
 
     public void accept(byte[] basic) {
@@ -57,7 +58,16 @@ public class InjectMapping {
             for (AnnotationNode invisibleAnnotation : methodNode.invisibleAnnotations) {
                 if (invisibleAnnotation.desc.equals("Lcn/enaium/inject/annotation/Method;")) {
                     String name = ASMUtil.getAnnotationValue(invisibleAnnotation, "name");
-                    methods.put(methodNode.desc, name);
+                    if (name != null) {
+                        methods.put(methodNode.desc, name);
+                    }
+                    AnnotationNode atAnnotationNode = ASMUtil.getAnnotationValue(invisibleAnnotation, "at");
+                    if (atAnnotationNode != null) {
+                        String target = ASMUtil.getAnnotationValue(atAnnotationNode, "target");
+                        if (target != null) {
+                            targets.add(target);
+                        }
+                    }
                 }
             }
         }

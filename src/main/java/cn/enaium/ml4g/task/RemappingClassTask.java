@@ -54,11 +54,7 @@ public class RemappingClassTask extends Task {
 
                         for (String mixinTarget : mixinMapping.targets) {
                             if (!mixinTarget.contains("field:")) {
-                                String targetClass = MappingUtil.classCleanToObfMap.get(mixinTarget.substring(1, mixinTarget.indexOf(";")));
-
-                                if (targetClass == null) {
-                                    continue;
-                                }
+                                String targetClass = mixinTarget.substring(1, mixinTarget.indexOf(";"));
 
                                 String targetMethod = getMethodObf(targetClass, mixinTarget.substring(mixinTarget.indexOf(";") + 1), false);
                                 if (targetMethod == null) {
@@ -129,6 +125,21 @@ public class RemappingClassTask extends Task {
 
                         for (Map.Entry<String, String> entry : injectMapping.methods.entrySet()) {
                             mapping.addProperty(entry.getValue(), getMethodObf(inject.replace(".", "/"), entry.getValue() + entry.getKey().replace("Lcn/enaium/inject/callback/Callback;", ""), true));
+                        }
+
+                        for (String target : injectMapping.targets) {
+                            String targetClass = target.substring(1, target.indexOf(";"));
+
+                            String targetMethod = getMethodObf(targetClass, target.substring(target.indexOf(";") + 1), false);
+
+                            System.out.println(targetMethod);
+
+                            if (targetMethod == null) {
+                                continue;
+                            }
+
+
+                            mapping.addProperty(target, targetMethod);
                         }
 
                         injectMappings.add(injectMapping.className, mapping);

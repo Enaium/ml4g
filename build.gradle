@@ -4,11 +4,10 @@ plugins {
 }
 
 group 'cn.enaium'
-version '1.0.9'
+version '1.0.10'
 
 repositories {
     mavenCentral()
-    maven { url 'https://maven.fabricmc.net/' }
 }
 
 dependencies {
