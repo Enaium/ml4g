@@ -57,6 +57,9 @@ public class GameUtil {
     public static List<String> getLibraries(String version) {
         LinkedHashMap<String, String> list = new LinkedHashMap<>();
         for (JsonElement jsonElement : new Gson().fromJson(getJson(version), JsonObject.class).get("libraries").getAsJsonArray()) {
+            if (jsonElement.getAsJsonObject().has("natives")) {
+                continue;
+            }
             String name = jsonElement.getAsJsonObject().get("name").getAsString();
             list.put(name.substring(0, name.lastIndexOf(":")), name.substring(name.lastIndexOf(":")));
         }
