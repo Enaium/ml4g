@@ -22,7 +22,7 @@ import static org.objectweb.asm.Opcodes.ASM9;
  */
 public class MappingUtil {
     public static final HashMap<String, String> map = new HashMap<>();
-    public static final HashMap<String, ArrayList<String>> superHashMap = new HashMap<>();
+    public static final HashMap<String, Set<String>> superHashMap = new HashMap<>();
 
     public static final HashMap<String, String> classObfToCleanMap = new HashMap<>();
     public static final HashMap<String, String> classCleanToObfMap = new HashMap<>();
@@ -206,7 +206,7 @@ public class MappingUtil {
         classReader.accept(new ClassVisitor(ASM9) {
             @Override
             public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
-                ArrayList<String> strings = new ArrayList<>();
+                Set<String> strings = new HashSet<>();
                 if (superHashMap.containsKey(name)) {
                     if (superName != null) {
                         if (!superHashMap.get(name).contains(superName)) {
@@ -282,7 +282,7 @@ public class MappingUtil {
             public String mapFieldName(String owner, String name, String descriptor) {
                 String remappedName = map(owner + '.' + name);
                 if (remappedName == null) {
-                    if (superHashMap.get(owner) != null) {
+                    if (superHashMap.containsKey(owner)) {
                         for (String s : superHashMap.get(owner)) {
                             String rn = mapFieldName(s, name, descriptor);
                             if (rn != null) {
@@ -300,7 +300,7 @@ public class MappingUtil {
             public String mapMethodName(String owner, String name, String descriptor) {
                 String remappedName = map(owner + '.' + name + descriptor);
                 if (remappedName == null) {
-                    if (superHashMap.get(owner) != null) {
+                    if (superHashMap.containsKey(owner)) {
                         for (String s : superHashMap.get(owner)) {
                             String rn = mapMethodName(s, name, descriptor);
                             if (rn != null) {
