@@ -37,7 +37,7 @@ public class RemappingClassTask extends Task {
                     byte[] bytes = FileUtils.readFileToByteArray(file);
                     MixinMapping mixinMapping = new MixinMapping();
                     mixinMapping.accept(bytes);
-                    MappingUtil.superHashMap.put(mixinMapping.className, new ArrayList<>(mixinMapping.mixins));
+                    MappingUtil.superHashMap.put(mixinMapping.className, new HashSet<>(mixinMapping.mixins));
                     for (String mixin : mixinMapping.mixins) {
 
                         JsonObject mapping = new JsonObject();
